@@ -7,7 +7,8 @@ An interactive historical atlas of the land called Canaan, Israel, Judah, Judaea
 ## What you can do
 
 - **Press play.** The history runs as a film of about nineteen minutes: captions, a moving camera, and music generated in the scale of each age (Bronze Age lyre tunings, Greek modes, Byzantine chant, maqam, plainchant, and on to the present). Only the scales are historical; the melodies are improvised.
-- **Pause and touch the map.** Tap a spot to see who rules it in that year; tap a town for its name then and now. Each answer is short, with a link to the full list.
+- **Touch the map while it plays.** Time keeps moving. Tap a spot to see who rules it that year; tap a town for its name then and now; tap the small discs for the people and stories of each age, and the gold diamonds for what happened there. Answers appear in one card above the caption.
+- When a caption names a place, road or region, the map lights it up and moves to it. Move the map yourself and the camera waits; **Follow the story** hands it back.
 - **Drag the coloured bar** to jump through time. **Read** opens the full chapter.
 - Under **⋯**: short guided journeys, a lens that scrapes down to the layer beneath, and the map's layers. **⌕** searches places, older names, years and words.
 

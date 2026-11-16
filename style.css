@@ -219,3 +219,32 @@ details summary::-webkit-details-marker{display:none}
 #intro p{font-size:1.15rem;line-height:1.4;color:var(--vellum2)}
 #intro .big{display:block;width:100%;margin:1.6em 0 .6em;padding:.85em;border-radius:12px;background:var(--gilt2);color:#1a1208;font-size:1.2rem;font-weight:600}
 #intro .quiet{color:var(--vellum2);font-size:1rem;border-bottom:1px dotted var(--gilt2);padding:.3em}
+
+/* ---- live map: card, markers, highlights ---- */
+#card{position:absolute;left:10px;right:10px;bottom:calc(var(--dockH,190px) - 34px);max-width:520px;margin:0 auto;z-index:4;background:var(--vellum);border:1px solid var(--gilt);border-radius:12px;padding:.75em .9em .8em;box-shadow:0 10px 30px rgba(20,10,0,.5);font-size:1.02rem;line-height:1.34;max-height:34vh;overflow-y:auto;-webkit-overflow-scrolling:touch;animation:cardin .25s ease}
+#card.big{max-height:52vh}
+@keyframes cardin{from{transform:translateY(14px);opacity:0}}
+#card .x{position:sticky;float:right;top:0;font-size:1.5rem;line-height:1;color:var(--ink2);padding:0 4px 4px 10px}
+#card h5{font-size:1.2rem;font-weight:600;line-height:1.15;margin-bottom:.2em}
+#card small{font-family:var(--sans);font-size:.64rem;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3);display:block;margin-bottom:.25em}
+#card p{color:var(--ink2);margin-bottom:.4em}
+#card p.dim{font-size:.95rem}
+#card .he{font-family:'Frank Ruhl Libre',serif;font-size:1.3rem;margin-right:.6em}
+#card .ar{font-family:'Amiri',serif;font-size:1.35rem}
+#card a.more{display:inline-block;margin-top:.3em;font-family:var(--sans);font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:#7a5a1a;cursor:pointer;font-weight:600}
+#card h3{font-family:var(--sans);font-size:.62rem;letter-spacing:.2em;text-transform:uppercase;color:#7a5a1a;margin:.9em 0 .35em;font-weight:600}
+#follow{background:var(--ink);color:var(--vellum);border-color:var(--gilt2)}
+.evm{font-size:12px;fill:var(--gilt2);stroke:#33271a;stroke-width:1.2px;paint-order:stroke;text-anchor:middle;dominant-baseline:central;cursor:pointer}
+.mk{cursor:pointer}
+.mk circle{fill:rgba(234,223,195,.92);stroke:rgba(120,95,55,.7);stroke-width:1}
+.mk .emo{font-size:15px;filter:none}
+.hl{fill:none;stroke:#ffd76a;stroke-width:3;vector-effect:non-scaling-stroke;stroke-linejoin:round;stroke-linecap:round;filter:drop-shadow(0 0 3px #7a4a00);animation:hlp 1.8s ease-in-out infinite}
+.hl.area{fill:rgba(255,215,106,.16)}
+.hl.line{stroke-width:5}
+.hl.ring{stroke-width:2.5}
+@keyframes hlp{0%,100%{stroke-opacity:1}50%{stroke-opacity:.35}}
+@keyframes tin{from{opacity:0}}
+#terrNow path,#labNow g{animation:tin .9s ease}
+.mk circle.hit{fill:transparent;stroke:none}
+.mk circle{r:11}
+.mk circle.hit{r:15}
