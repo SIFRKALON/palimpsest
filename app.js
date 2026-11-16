@@ -10,7 +10,7 @@ const CAPEMO=Object.assign({nineveh:'🦁',alexandria:'🏺',antioch:'🏛️',m
 const LEFT=new Set(['jaffa','gaza','ashkelon','caesarea','haifa','acre','tyre','sidon','ashdod','rafah','telaviv','khanyunis','ramla','lachish','megiddo','samaria','hebron','beersheba']);
 const JERU=A.PLACES.jerusalem.ll;
 const $=s=>document.querySelector(s);
-const WIDE=()=>window.matchMedia('(min-width:900px)').matches;
+const WIDE=()=>false;
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 /* ---------- projection (Mercator, matching the relief sheet) ---------- */
@@ -54,13 +54,13 @@ function yearOf(f){f=Math.min(.99999,Math.max(0,f));const i=Math.floor(f*N),u=f*
 const active=(o,y,e)=>{const r=o.y||e.geo.y;return y>=r[0]&&(y<r[1]||(r[1]>=2026&&y<=r[1]));};
 
 /* ---------- state ---------- */
-const st={year:REP.rome,era:-1,layers:{rule:1,people:1,roads:1,voices:1,sacred:0,borders:0},lens:{on:false,x:0,y:0,r:90,depth:1},journey:null,sel:null,cap:null,capView:false,playing:false};
+const st={year:REP.rome,era:-1,layers:{rule:1,people:1,roads:1,voices:1,sacred:0,borders:0},lens:{on:false,x:0,y:0,r:90,depth:1},journey:null,sel:null,cap:null,capView:false,playing:false,tw:null,scenePlace:null};
 let T=d3.zoomIdentity,k0=1,W=0,H=0;
 
 /* ---------- svg scaffold ---------- */
 const svg=d3.select('#map');
 const defs=svg.append('defs');
-defs.append('clipPath').attr('id','clipLand').append('path').attr('clip-rule','evenodd').attr('d',geomD(G.land));
+defs.append('clipPath').attr('id','clipLand').append('path').attr('clip-rule','evenodd').attr('d',geomD(G.landClip));
 ['mandate','westbank'].forEach(k=>defs.append('clipPath').attr('id','clip-'+k).append('path').attr('clip-rule','evenodd').attr('d',geomD(G.mod[k])));
 const lensIn=defs.append('clipPath').attr('id','lensIn').append('circle');
 const lensOut=defs.append('clipPath').attr('id','lensOut').append('path').attr('clip-rule','evenodd');
@@ -91,18 +91,19 @@ function applyCS(){const k=T.k,r=k/k0;root.selectAll('.cs').each(function(){cons
 /* ---------- zoom ---------- */
 const zoom=d3.zoom().scaleExtent([.03,20]).translateExtent([[-4500,-3500],[3300,3000]])
   .filter(e=>!e.target.closest||!e.target.closest('#lensTab'))
+  .on('start',e=>{if(e.sourceEvent)setPlay(false);})
   .on('zoom',e=>{T=e.transform;root.attr('transform',T);applyCS();placeLens();hideBubble();})
   .on('end',()=>{declutter();});
 svg.call(zoom).on('dblclick.zoom',null);
 function fit(b,pad,dur,maxK){
   const p0=proj([b[0][0],b[1][1]]),p1=proj([b[1][0],b[0][1]]);
-  pad=Object.assign({t:118,b:20,l:16,r:16},pad||{}); pad.b+=dockPad();
+  pad=Object.assign({t:112,b:6,l:14,r:14},pad||{}); pad.b+=dockPad();
   let k=Math.min((W-pad.l-pad.r)/(p1[0]-p0[0]),(H-pad.t-pad.b)/(p1[1]-p0[1])); if(maxK)k=Math.min(k,maxK);
   const t=d3.zoomIdentity.translate((W+pad.l-pad.r)/2-k*(p0[0]+p1[0])/2,(H+pad.t-pad.b)/2-k*(p0[1]+p1[1])/2).scale(k);
   (dur?svg.transition().duration(dur):svg).call(zoom.transform,t); return k;
 }
 const HOME=[[34.0,29.4],[36.3,33.45]];
-function dockPad(){if(WIDE())return 0;const d=$('#dock');return $('#sheet').classList.contains('open')?st.dockH||170:(st.dockH=d.offsetHeight);}
+function dockPad(){return 172;}
 function home(dur){st.capView=false;fit(HOME,null,dur);}
 function flyTo(ll,z,dur){const k=k0*z,p=proj(ll);svg.transition().duration(dur==null?900:dur).call(zoom.transform,d3.zoomIdentity.translate(W/2-k*p[0],((H-dockPad())/2+40)-k*p[1]).scale(k));}
 function size(){const r=$('#mapwrap').getBoundingClientRect();W=r.width;H=r.height;document.documentElement.style.setProperty('--dockH',(WIDE()?0:$('#dock').offsetHeight)+'px');svg.attr('viewBox',`0 0 ${W} ${H}`);st.lens.r=Math.round(Math.min(W,H)*.2);}
@@ -139,20 +140,20 @@ const terrSig=(e,y)=>e.id+':'+e.geo.terr.map((t,i)=>active(t,y,e)?i:'').join(','
 
 /* ---------- places ---------- */
 function eraPlaces(e,y){
-  const seen=new Set(),out=[];
-  const labs=new Set();(e.geo.places||[]).concat(e.places||[]).forEach(p=>{if(seen.has(p[0])||labs.has(p[1])||!A.PLACES[p[0]])return;if(p[2]&&y<p[2])return;seen.add(p[0]);labs.add(p[1]);out.push({k:p[0],label:p[1]});});
-  if(st.sel&&!seen.has(st.sel)&&A.PLACES[st.sel]){const ny=(C.NAME_YEARS||{})[st.sel];let nm=C.CITIES[st.sel].en;if(ny){ny.forEach(n=>{if(n[0]<=y)nm=n[1].split(' · ')[0];});}out.push({k:st.sel,label:nm});}
+  const seen=new Set(),labs=new Set(),out=[],old=e.places||[],oldK=new Set(old.map(p=>p[0])),oldL=new Set(old.map(p=>p[1]));
+  (e.geo.places||[]).concat(old).forEach(p=>{if(seen.has(p[0])||labs.has(p[1])||!A.PLACES[p[0]])return;if(p[2]&&y<p[2])return;seen.add(p[0]);labs.add(p[1]);out.push({k:p[0],label:p[1],x:!(oldK.has(p[0])||oldL.has(p[1]))});});
+  [st.sel,st.scenePlace].forEach(k=>{if(!k||!A.PLACES[k])return;const o=out.find(o=>o.k===k);if(o)o.x=false;else out.push({k,label:nameAt(k,y)});});
   return out;
 }
 function drawPlaces(e,y){
   gPlaces.selectAll('*').remove();
   eraPlaces(e,y).forEach((p,i)=>{
     const pl=A.PLACES[p.k],left=LEFT.has(p.k);
-    const g=cs(gPlaces.append('g').attr('class','pin r'+pl.rank+(st.sel===p.k?' sel':'')),pl.ll,{minr:pl.rank>2?.75:.42}).datum({k:p.k,pri:(st.sel===p.k?0:pl.rank)*100+i,left,len:p.label.length});
+    const g=cs(gPlaces.append('g').attr('class','pin r'+pl.rank+(st.sel===p.k?' sel':'')),pl.ll,{minr:p.x?1.7:pl.rank>2?.75:.42}).datum({k:p.k,pri:(st.sel===p.k?0:pl.rank)*100+i,left,len:p.label.length});
     g.append('circle').attr('r',16).attr('fill','transparent');
     g.append('circle').attr('class','dot').attr('r',pl.rank===1?3.6:2.8);
     g.append('text').attr('class','pl').attr('x',left?-8:8).attr('dy','.34em').attr('text-anchor',left?'end':'start').text(p.label);
-    g.on('click',ev=>{ev.stopPropagation();openPlace(p.k);});
+    g.on('click',ev=>{ev.stopPropagation();openPlace(p.k,ev);});
   });
 }
 function declutter(){
@@ -210,17 +211,10 @@ function drawRoutes(e,y){
     const d=smoothOpen(r.p.map(proj));
     const p=gRoutes.append('path').attr('class','route'+(r.rail?' rail':'')).attr('stroke',r.c).attr('d',d);
     gRoutes.append('path').attr('class','routehit').attr('d',d).on('click',ev=>{ev.stopPropagation();bubbleAt(ev,`<h5>${esc(r.l)}</h5><p>${esc(r.text)}</p>`);});
-    if(r.id==='maris'&&e.id!=='orientation'){['🫒','🏺','🧂'].forEach((em,i)=>{const el=gRoutes.append('text').attr('class','emo sm').text(em).on('click',ev=>{ev.stopPropagation();bubbleAt(ev,`<h5>${em} Trade on the coast road</h5><p>${esc(C.TRADE_INFO[e.id]||'')}</p>`);});anim.push({type:'trade',el:el.node(),path:p.node(),len:p.node().getTotalLength(),t:i/3,sp:.000018});});}
   });
 }
-const VOFF=[[-30,-28],[32,26],[-30,30],[32,-30]];
 function drawVoices(e){
-  gVoices.selectAll('*').remove(); gSacred.selectAll('*').remove();
-  if(st.layers.voices) (e.stories||[]).forEach((s,i)=>{
-    const pl=A.PLACES[s.loc]||A.PLACES.jerusalem,o=VOFF[i%4];
-    cs(gVoices.append('g'),pl.ll,{dx:o[0],dy:o[1],minr:.55}).append('text').attr('class','emo').text(s.prop)
-      .on('click',ev=>{ev.stopPropagation();bubbleAt(ev,`<h5>${s.prop} ${esc(s.role)}</h5><p>${esc(s.text)}</p>`);});
-  });
+  gSacred.selectAll('*').remove();
   if(st.layers.sacred) (C.ERA_SACRED[e.id]||[]).forEach(k=>{
     const s=C.SACRED_SITES[k],dx=k==='temple'?13:k==='sepulchre'?-13:0;
     cs(gSacred.append('g'),A.SACRED_LL[k],{dx,dy:k==='bethlehem'?12:0,minr:.9}).append('text').attr('class','emo sm').text(s.icon)
@@ -236,67 +230,192 @@ function drawWaters(y){
 }
 function pulse(ll){const g=cs(gFx.append('g'),ll);const c=g.append('circle').attr('class','pulse').attr('r',4);anim.push({type:'pulse',el:c.node(),g:g.node(),t0:performance.now()});applyCS();}
 
-let last=0;
-function tick(now){
-  const dt=Math.min(60,now-last||16);last=now;const k=T.k;
-  for(let i=anim.length-1;i>=0;i--){const a=anim[i];
-    if(a.type==='dot'){a.t=(a.t+a.sp*dt)%1;const u=a.t,q=1-u;a.el.setAttribute('transform',`translate(${q*q*a.a[0]+2*q*u*a.c[0]+u*u*a.b[0]},${q*q*a.a[1]+2*q*u*a.c[1]+u*u*a.b[1]}) scale(${1/k})`);a.el.setAttribute('opacity',Math.min(1,Math.min(u,1-u)*8));}
-    else if(a.type==='courier'||a.type==='trade'){if(a.type==='trade')a.el.style.display=k/k0<.5?'none':'';a.t=(a.t+a.sp*dt)%1;const p=a.path.getPointAtLength(a.t*a.len);a.el.setAttribute('transform',`translate(${p.x},${p.y}) scale(${1/k})`);}
-    else if(a.type==='pulse'){const u=(now-a.t0)/1800;if(u>=1){a.g.remove();anim.splice(i,1);continue;}const v=(u*2)%1;a.el.setAttribute('r',4+v*24);a.el.setAttribute('opacity',1-v);}
-  }
-  if(st.playing){const f=fracOf(st.year)+dt/(N*6500);if(f>=.9995){setPlay(false);}else setYear(yearOf(f),{noHash:true,raw:f});}
-  requestAnimationFrame(tick);
-}
 
 /* ---------- year + era rendering ---------- */
-let sigT='',sigP='',sigF='',sigW='',sigR='',lastEv=null;
+let sigT='',sigP='',sigF='',sigW='',sigR='';
 function setYear(y,o){
-  o=o||{}; const i=eraIdxOf(y),e=ERAS[i]; y=Math.max(ERAS[0].geo.y[0],Math.min(y,ERAS[N-1].geo.y[1])); st.year=y;
-  if(i!==st.era){if(st.sel&&!o.keepSel)st.sel=null;st.era=i;renderEra(e);sigT=sigP=sigF=sigR='';lastEv=null;}
+  o=o||{}; y=Math.max(ERAS[0].geo.y[0],Math.min(y,ERAS[N-1].geo.y[1])); const i=eraIdxOf(y),e=ERAS[i]; st.year=y;
+  if(i!==st.era){if(st.sel&&!o.keepSel)st.sel=null;st.era=i;onEra(e);sigT=sigP=sigF=sigR='';}
   const s1=terrSig(e,y); if(s1!==sigT){sigT=s1;drawTerr(gTerr,gLab,e,y);}
-  const s2=e.id+eraPlaces(e,y).map(p=>p.k+p.label).join()+st.sel; if(s2!==sigP){sigP=s2;drawPlaces(e,y);}
+  const s2=e.id+eraPlaces(e,y).map(p=>p.k+p.label+(p.x?1:0)).join()+st.sel+st.scenePlace; if(s2!==sigP){sigP=s2;drawPlaces(e,y);}
   const s3=e.id+(e.geo.flows||[]).map((f,j)=>active(f,y,e)?j:'').join()+st.layers.people; if(s3!==sigF){sigF=s3;drawFlows(e,y);}
   const s4=e.id+A.ROUTES.map((r,j)=>y>=r.y[0]&&y<=r.y[1]?j:'').join()+st.layers.roads; if(s4!==sigR){sigR=s4;drawRoutes(e,y);}
   const w=A.WATERS.map(w=>w.names.findIndex(n=>y>=n[0]&&y<n[1])).join()+(y<1958); if(w!==sigW){sigW=w;drawWaters(y);}
   const ck=capOf(e,y); if(ck!==st.cap||o.force){drawPower(e,y);}
   applyCS(); declutter();
-  // header
   const yb=$('#yearBig'); if(e.id==='orientation') yb.innerHTML='<span style="font-size:.62em">Before the names</span>'; else {const f=fmtY(y);yb.innerHTML=f[0]+(f[1]?`<small>${f[1]}</small>`:'');}
   $('#thumb').style.left=(o.raw!=null?o.raw:fracOf(y))*100+'%'; $('#thumbLab').textContent=e.id==='orientation'?'the land itself':fmtYs(y);
-  // chronicle
-  const evs=e.geo.events||[]; let cur=-1; evs.forEach((ev,j)=>{if(ev[0]<=y)cur=j;});
-  document.querySelectorAll('#body .chron li').forEach((li,j)=>{li.classList.toggle('past',j<=cur);li.classList.toggle('cur',j===cur);});
-  const pk=$('#peek');
-  if(cur>=0){const ev=evs[cur];pk.innerHTML=`<div class="ev"><b>${fmtYs(ev[0])}</b>${esc(ev[1])}</div><div class="more">Open the chapter</div>`;
-    if(lastEv!==null&&lastEv!==e.id+cur&&ev[2]&&A.PLACES[ev[2]]&&!st.journey) pulse(A.PLACES[ev[2]].ll);}
-  else pk.innerHTML=`<div class="ess">${esc(e.essence)}</div><div class="more">Open the chapter</div>`;
-  lastEv=e.id+cur;
   if(st.lens.on) drawUnder();
   if(!o.noHash) saveHash();
 }
-function renderEra(e){
+function onEra(e){
   document.querySelectorAll('#segs i').forEach((s,j)=>s.classList.toggle('on',j===st.era));
   $('#eraLine').innerHTML=`<b>${esc(e.name)}</b><br><i>${esc(e.range)}${e.id==='orientation'?'':' · '+esc(e.cyr)}</i>`;
-  drawVoices(e);
-  // chapter body
-  let h='';
-  h+='<div class="names">'+e.land.map(l=>`<span><em>${esc(l[0])}</em>${esc(l[1])}</span>`).join('')+'</div>';
-  h+=`<p class="lead" style="margin-top:.8em">${esc(e.essence)}</p>`;
+  drawVoices(e); Snd.era(e.id);
+}
+function chapterHTML(e){
+  let h=`<h3 style="margin-top:0">${esc(e.range)}${e.id==='orientation'?'':' · '+esc(e.cyr)}</h3><h2>${esc(e.name)}</h2><p class="sub">${esc(e.essence)}</p>`;
+  h+=e.body.map(p=>`<p>${p}</p>`).join('');
+  if(e.gap) h+=`<div class="note">${e.gap}</div>`;
+  h+='<div class="names" style="margin:.2em 0 1em">'+e.land.map(l=>`<span><em>${esc(l[0])}</em>${esc(l[1])}</span>`).join('')+'</div>';
   const evs=e.geo.events||[];
-  if(evs.length) h+='<h3>Chronicle</h3><ul class="chron">'+evs.map((ev,j)=>`<li data-ev="${j}"><b>${fmtYs(ev[0])}</b>${esc(ev[1])}</li>`).join('')+'</ul>';
-  h+='<h3>The chapter</h3>'+e.body.map(p=>`<p>${p}</p>`).join('');
-  if(e.bible) h+=`<h3>Scripture and evidence</h3><div class="note">${[].concat(e.bible).join('<br>')}</div>`;
-  if(e.gap) h+=`<h3>What carries over</h3><div class="note">${e.gap}</div>`;
-  if(e.powerCenter){const pc=e.powerCenter;h+=`<h3>Ruled from</h3><div class="note"><b>${esc(pc.city)}</b> — ${esc(pc.kind)}.${pc.distanceMiles?` Travel time: ${esc(pc.travelTime)}.`:''}</div>`;}
-  const pop=C.POPULATION[e.id]; if(pop) h+=`<h3>Who calls it home</h3><div class="note"><b>${esc(pop.who)}.</b> ${esc(pop.detail)}</div>`;
-  const facts=C.MAP_FACTS[e.id]||[]; if(facts.length) h+='<h3>In the margins</h3>'+facts.map(f=>`<div class="note">${f.icon} <b>${esc(f.title)}.</b> ${esc(f.text)}</div>`).join('');
-  if(C.TRADE_INFO[e.id]) h+=`<h3>Trade</h3><div class="note">🫒 ${esc(C.TRADE_INFO[e.id])}</div>`;
-  if((e.stories||[]).length) h+='<h3>Voices</h3>'+e.stories.map(s=>`<div class="voice"><span class="e">${s.prop}</span><p><b>${esc(s.role)}</b> ${esc(s.text)}</p></div>`).join('')+'<p class="foot" style="margin-top:.5em">These voices are representative composites, not quotations.</p>';
-  const cols=[...new Set((e.geo.flows||[]).map(f=>f.col))]; if(cols.length) h+='<h3>People on the move</h3><div class="legend">'+cols.map(c=>`<span><i style="background:${C.FLOWCOL[c][0]}"></i>${esc(C.FLOWCOL[c][1])}</span>`).join('')+'</div>';
-  if(C.SLIDE_NOTES[e.id]) h+=`<p class="foot">${esc(C.SLIDE_NOTES[e.id])}</p>`;
-  if(st.era===N-1) h+=`<p class="foot">${esc(C.FOOT)}</p>`;
-  h+='<p class="foot">Borders here are washes of colour, not survey lines. Tap any spot on the map to see who has ruled it.</p>';
-  const b=$('#body'); b.innerHTML=h; b.scrollTop=0;
+  if(evs.length) h+='<details><summary>Chronicle</summary><ul class="chron">'+evs.map(ev=>`<li data-jump="${ev[0]}"><b>${fmtYs(ev[0])}</b>${esc(ev[1])}</li>`).join('')+'</ul></details>';
+  if((e.stories||[]).length) h+='<details><summary>Voices</summary>'+e.stories.map(s=>`<div class="voice"><span class="e">${s.prop}</span><p><b>${esc(s.role)}</b> ${esc(s.text)}</p></div>`).join('')+'<p class="foot" style="font-size:.92rem;color:var(--ink2);font-style:italic;margin-top:.5em">Representative composites, not quotations.</p></details>';
+  let more='';
+  if(e.bible) more+=`<div class="note"><b>Scripture and evidence.</b> ${[].concat(e.bible).join(' ')}</div>`;
+  if(e.powerCenter){const pc=e.powerCenter;more+=`<div class="note"><b>Ruled from ${esc(pc.city)}.</b> ${esc(pc.kind)}.</div>`;}
+  const pop=C.POPULATION[e.id]; if(pop) more+=`<div class="note"><b>${esc(pop.who)}.</b> ${esc(pop.detail)}</div>`;
+  if(C.TRADE_INFO[e.id]) more+=`<div class="note">🫒 <b>Trade.</b> ${esc(C.TRADE_INFO[e.id])}</div>`;
+  (C.MAP_FACTS[e.id]||[]).forEach(f=>{more+=`<div class="note">${f.icon} <b>${esc(f.title)}.</b> ${esc(f.text)}</div>`;});
+  if(more) h+=`<details><summary>People, power and trade</summary>${more}</details>`;
+  const m=MUSIC[e.id]; if(m) h+=`<details><summary>The music</summary><div class="note">♪ <b>${esc(m.name)}.</b> ${esc(m.note)}</div></details>`;
+  if(st.era===N-1) h+=`<p class="sub" style="margin-top:1em">${esc(C.FOOT)}</p>`;
+  return h;
+}
+
+/* ---------- music: what each age may have sounded like ---------- */
+const PY=[0,204,408,498,702,906,1110];
+const MUSIC={
+ orientation:{name:'A drone, before music we can name',root:110,cents:[0,702],inst:['voice'],bpm:26,dens:.25,drone:.9,note:'Nothing is known of the music of these millennia. This is only an open fifth.'},
+ canaan:{name:'Bronze Age lyre',root:196,cents:PY,inst:['lyre'],bpm:66,dens:.8,drone:.25,note:'Clay tablets from Babylonia and Ugarit record how lyres were tuned, in seven-note scales close to this one, and one hymn of about 1400 BCE survives. The tune here is improvised.'},
+ israel:{name:'The kinnor, a lyre',root:185,cents:[0,204,294,498,702,906,996],inst:['lyre'],bpm:60,dens:.75,drone:.3,note:'The Psalms name the kinnor and the nevel, both stringed. Their tuning is not recorded; this borrows the neighbouring Mesopotamian system.'},
+ persia:{name:'Lyre and reed pipe',root:174.6,cents:[0,204,294,498,702,792,996],inst:['lyre','ney'],bpm:58,dens:.7,drone:.35,note:'No notation survives from the Persian period. This is a guess, kept close to what came before.'},
+ hasmon:{name:'Greek Dorian mode',root:164.8,cents:[0,90,294,498,702,792,996],inst:['lyre'],bpm:70,dens:.8,drone:.2,note:'Greek music theory is well documented, and some sixty fragments of notated music survive. The Dorian was the mode Greeks thought most dignified.'},
+ rome:{name:'Greek modes under Rome',root:220,cents:[0,204,408,498,702,906,996],inst:['lyre','ney'],bpm:72,dens:.8,drone:.2,note:'The scale of the Seikilos epitaph, the oldest complete song with notation, from Roman Asia Minor. The tune here is improvised, not that song.'},
+ byz:{name:'Byzantine chant over a drone',root:146.8,cents:[0,200,367,500,700,900,1067],inst:['voice'],bpm:44,dens:.85,drone:.8,note:'Byzantine chant is a living tradition with a held bass note, the ison. Its notation begins around the 10th century; the earlier sound is reconstructed.'},
+ islam:{name:'Maqam Rast on the oud',root:146.8,cents:[0,204,355,498,702,906,1053],inst:['oud'],bpm:76,dens:.8,drone:.3,note:'Al-Kindi and al-Farabi described the oud and its scales in the 9th and 10th centuries, including the “neutral” third heard here, between major and minor.'},
+ crusader:{name:'Plainchant in parallel fifths',root:146.8,cents:[0,204,294,498,702,906,996],inst:['chant'],bpm:46,dens:.85,drone:.5,note:'Latin chant in the Dorian mode, sung in parallel fifths as in the organum of the 12th century. Outside the castle walls the oud played on.'},
+ mamluk:{name:'Maqam Bayati, oud and ney',root:146.8,cents:[0,151,294,498,702,792,996],inst:['oud','ney'],bpm:70,dens:.75,drone:.35,note:'By the 13th century Safi al-Din al-Urmawi had set out a full system of modes. Bayati, with its lowered second, is one of the most common in Arab music today.'},
+ ottoman:{name:'Makam Hicaz, ney and tanbur',root:146.8,cents:[0,125,385,498,702,820,996],inst:['ney','oud'],bpm:60,dens:.75,drone:.4,note:'Ottoman court music was written down from about 1700. Hicaz, with its wide second step, is the sound many listeners hear as “Eastern”.'},
+ mandate:{name:'Oud and piano, side by side',root:146.8,cents:[0,100,300,500,700,800,1000],inst:['oud','piano'],bpm:72,dens:.75,drone:.2,note:'Arab urban song and European concert music shared the same cities. Both instruments here play one scale, taking turns.'},
+ '48':{name:'One scale, two names',root:146.8,cents:[0,100,400,500,700,800,1000],inst:['piano','oud'],bpm:56,dens:.6,drone:.3,note:'Jews call this mode Ahava Rabbah or freygish; Arabs call it Hijaz. It is the same set of notes.'},
+ '67':{name:'A minor key, plucked',root:146.8,cents:[0,200,300,500,700,800,1000],inst:['guitar'],bpm:64,dens:.65,drone:.25,note:'The era of the guitar on both sides: Israeli folk song, and the Palestinian oud revival.'},
+ oslo:{name:'Dorian, guitar and piano',root:146.8,cents:[0,200,300,500,700,900,1000],inst:['guitar','piano'],bpm:68,dens:.65,drone:.25,note:'A modal scale with one raised note: a little more open than minor.'},
+ now:{name:'A few notes over a drone',root:130.8,cents:[0,100,400,500,700,800,1000],inst:['piano'],bpm:36,dens:.4,drone:.7,note:'Sparse on purpose.'}
+};
+const Snd=(function(){
+  let ctx=null,master,rev,droneG,dr=[],cfg=null,next=0,timer=null,deg=3,ph=0,phLen=7,instI=0,on=false;
+  function init(){
+    ctx=new (window.AudioContext||window.webkitAudioContext)();
+    master=ctx.createGain();master.gain.value=0;const comp=ctx.createDynamicsCompressor();master.connect(comp);comp.connect(ctx.destination);
+    rev=ctx.createConvolver();const len=Math.floor(ctx.sampleRate*2.8),buf=ctx.createBuffer(2,len,ctx.sampleRate);
+    for(let c=0;c<2;c++){const d=buf.getChannelData(c);for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/len,2.6);}
+    rev.buffer=buf;const rg=ctx.createGain();rg.gain.value=.5;rev.connect(rg);rg.connect(master);
+    droneG=ctx.createGain();droneG.gain.value=0;const lp=ctx.createBiquadFilter();lp.type='lowpass';lp.frequency.value=520;droneG.connect(lp);lp.connect(master);lp.connect(rev);
+    [1,1.004,1.5].forEach((m,i)=>{const o=ctx.createOscillator();o.type=i<2?'sawtooth':'triangle';const g=ctx.createGain();g.gain.value=i<2?.1:.06;o.frequency.value=110*m;o.connect(g);g.connect(droneG);o.start();dr.push({o,m});});
+  }
+  function send(n,wet){n.connect(master);const w=ctx.createGain();w.gain.value=wet;n.connect(w);w.connect(rev);}
+  function tone(type,f,t,g,chain){const o=ctx.createOscillator();o.type=type;o.frequency.setValueAtTime(f,t);o.connect(chain);o.start(t);return o;}
+  function note(inst,f,t,d,v){
+    const g=ctx.createGain(),lp=ctx.createBiquadFilter();lp.type='lowpass';lp.connect(g);let os=[],end;
+    if(inst==='lyre'||inst==='oud'||inst==='guitar'||inst==='piano'){
+      const dec=inst==='oud'?1.0:inst==='piano'?2.4:inst==='guitar'?1.8:1.5;
+      lp.frequency.setValueAtTime(f*(inst==='oud'?5:inst==='piano'?7:8),t);lp.frequency.exponentialRampToValueAtTime(f*(inst==='oud'?1.5:2.2),t+.35);lp.Q.value=inst==='oud'?2:.7;
+      g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(v,t+.006);g.gain.exponentialRampToValueAtTime(.0008,t+dec);
+      const m1=ctx.createGain();m1.gain.value=.6;m1.connect(lp);const m2=ctx.createGain();m2.gain.value=inst==='piano'?.18:.32;m2.connect(lp);
+      os.push(tone('triangle',f,t,0,m1));os.push(tone(inst==='piano'?'sine':'sawtooth',inst==='piano'?f*2:f*(inst==='oud'?1.004:1),t,0,m2));
+      if(inst==='oud')os.push(tone('triangle',f/2,t,0,m2));
+      end=t+dec+.1;send(g,inst==='piano'?.5:.35);
+    }else{ // ney, voice, chant
+      const voice=inst!=='ney';
+      lp.frequency.value=voice?1500:f*4;
+      g.gain.setValueAtTime(.0001,t);g.gain.linearRampToValueAtTime(v*(voice?.5:.7),t+(voice?.3:.12));g.gain.setValueAtTime(v*(voice?.5:.7),t+Math.max(.2,d-.15));g.gain.linearRampToValueAtTime(.0001,t+d+(voice?.6:.3));
+      let chain=lp;
+      if(voice){const bp=ctx.createBiquadFilter();bp.type='bandpass';bp.frequency.value=760;bp.Q.value=.9;bp.connect(lp);chain=bp;}
+      const o1=tone(voice?'sawtooth':'sine',f,t,0,chain);os.push(o1);
+      if(voice)os.push(tone('sawtooth',f*1.005,t,0,chain));
+      else{const h=ctx.createGain();h.gain.value=.16;h.connect(lp);os.push(tone('sine',f*2,t,0,h));
+        const l=ctx.createOscillator(),lg=ctx.createGain();l.frequency.value=5.2;lg.gain.setValueAtTime(0,t);lg.gain.linearRampToValueAtTime(f*.007,t+.5);l.connect(lg);lg.connect(o1.frequency);l.start(t);os.push(l);}
+      end=t+d+.8;send(g,.7);
+    }
+    os.forEach(o=>o.stop(end));
+  }
+  const fq=d=>{const n=cfg.cents.length,o=Math.floor(d/n),k=((d%n)+n)%n;return cfg.root*Math.pow(2,(cfg.cents[k]+1200*o)/1200);};
+  function stepNote(t){
+    const beat=60/cfg.bpm,n=cfg.cents.length;let len=[1,1,.5,.5,2][Math.floor(Math.random()*5)];
+    const inst=cfg.inst[instI%cfg.inst.length],slow=inst==='voice'||inst==='chant'||inst==='ney';
+    if(slow)len=[2,2,3,1][Math.floor(Math.random()*4)];
+    ph++;
+    if(ph>=phLen){ // close the phrase on the root or the fifth, then breathe
+      deg=Math.random()<.6?(deg>n/2?n:0):Math.min(4,n-1);len=slow?4:3;ph=0;phLen=5+Math.floor(Math.random()*5);
+      play(inst,deg,t,len*beat*.9);instI++;return len*beat+beat*(1+Math.floor(Math.random()*3));
+    }
+    if(Math.random()>cfg.dens)return len*beat;
+    let mv=[-2,-1,-1,1,1,2][Math.floor(Math.random()*6)];if(deg>n+2)mv=-Math.abs(mv);if(deg<-1)mv=Math.abs(mv);deg+=mv;
+    play(inst,deg,t,len*beat*.9);return len*beat;
+  }
+  function play(inst,d,t,dur){
+    const v=.2+Math.random()*.08;
+    if(inst==='chant'){note('voice',fq(d),t,dur,v);note('voice',fq(d)*1.5,t,dur,v*.6);}
+    else note(inst,fq(d)*(inst==='ney'?2:1),t,dur,inst==='ney'?v*.6:v);
+  }
+  function loop(){if(!on||!cfg)return;const now=ctx.currentTime;if(next<now)next=now+.05;while(next<now+.45)next+=stepNote(next);}
+  return {
+    set(v){on=v;if(v&&!ctx)init();if(!ctx)return;ctx.resume();master.gain.setTargetAtTime(v?.6:0,ctx.currentTime,.35);clearInterval(timer);if(v){this.era(ERAS[st.era]?ERAS[st.era].id:'orientation',true);timer=setInterval(loop,110);}},
+    era(id,force){const c=MUSIC[id];if(!c||(!force&&c===cfg))return;cfg=c;deg=3;ph=0;instI=0;if(!ctx)return;const t=ctx.currentTime;dr.forEach(d=>d.o.frequency.setTargetAtTime(c.root/2*d.m,t,.9));droneG.gain.setTargetAtTime(c.drone*.55,t,1.4);next=Math.max(next,t+1.2);},
+    get on(){return on;}
+  };
+})();
+
+/* ---------- the film: scenes, captions, camera ---------- */
+let MAIN=[],SC=[],sc=0,sceneT0=0,inJourney=null;
+function buildScenes(){
+  const out=[];
+  ERAS.forEach((e,i)=>{
+    const g=e.geo,list=[{y:g.y[0],kind:'title',era:i,head:e.name,kick:i?e.range+' · '+e.cyr:'The land itself',text:esc(e.essence),cam:{home:1},dur:6500}];
+    if(!i)(C.MAP_FACTS.orientation||[]).forEach((f,j)=>list.push({y:g.y[0]+40+j*50,kind:'event',era:i,kick:f.title,text:esc(f.text),cam:{home:1}}));
+    (g.events||[]).forEach(ev=>list.push({y:ev[0],kind:'event',era:i,kick:fmtYs(ev[0]),text:esc(ev[1]),cam:ev[2]&&A.PLACES[ev[2]]?{c:A.PLACES[ev[2]].ll,z:2.2}:{home:1},place:ev[2]}));
+    (g.caps||[]).forEach(c=>{const d=km(JERU,A.FAR[c[2]][1]);if(d>150)list.push({y:c[0]+(c[1]-c[0])*.03,kind:'power',era:i,kick:'Ruled from elsewhere',text:`The orders now come from <b>${esc(A.FAR[c[2]][0])}</b>, ${Math.round(d*.621/10)*10} miles away.`,cam:{cap:c[2]},dur:6000});});
+    const s=(e.stories||[])[0];if(s)list.push({y:REP[e.id],kind:'voice',era:i,kick:'A voice',text:`<span class="emj">${s.prop}</span><b>${esc(s.role)}</b> ${esc(s.text)}`,cam:{c:(A.PLACES[s.loc]||A.PLACES.jerusalem).ll,z:2.6},emoji:s.prop,loc:s.loc});
+    list.sort((a,b)=>a.kind==='title'?-1:b.kind==='title'?1:a.y-b.y);
+    out.push(...list);
+  });
+  out.forEach(s=>{if(!s.dur)s.dur=Math.max(5000,1600+s.text.replace(/<[^>]+>/g,'').length*60);});
+  return out;
+}
+function sceneAt(y){let k=0;MAIN.forEach((s,i)=>{if(s.y<=y)k=i;});return k;}
+function caption(s){
+  const k=$('#capKick'),t=$('#capText');
+  k.innerHTML=`<span>${esc(s.kick)}</span>`+(inJourney?'<button id="jExit">leave ✕</button>':(Snd.on?`<button id="mNote">♪ ${esc(MUSIC[ERAS[s.era].id].name)}</button>`:''));
+  t.classList.add('fade');
+  setTimeout(()=>{t.innerHTML=(s.head?`<span class="head">${esc(s.head)}</span>`:'')+s.text;t.classList.remove('fade');},180);
+}
+function camera(s,dur){
+  gVoices.selectAll('.scv').remove();
+  if(s.emoji&&A.PLACES[s.loc]){cs(gVoices.append('g').attr('class','scv'),A.PLACES[s.loc].ll,{dy:-30}).append('text').attr('class','emo').text(s.emoji).style('pointer-events','none');}
+  st.scenePlace=s.place&&A.PLACES[s.place]?s.place:(s.loc||null); sigP='';
+  if(s.cam.cap){capView(true,s.cam.cap);} else {if(st.capView){st.capView=false;}
+    if(s.cam.c)flyTo(s.cam.c,s.cam.z||2,dur==null?1500:dur); else home(dur==null?1300:dur);}
+  if(s.place&&A.PLACES[s.place])setTimeout(()=>pulse(A.PLACES[s.place].ll),700);
+}
+function showScene(i,o){
+  o=o||{}; i=Math.max(0,Math.min(SC.length-1,i)); sc=i; const s=SC[i]; sceneT0=performance.now();
+  if(o.tween&&Math.abs(fracOf(s.y)-fracOf(st.year))>.0005){st.tw={a:fracOf(st.year),b:fracOf(s.y),y:s.y,t0:sceneT0,dur:Math.min(2200,700+Math.abs(fracOf(s.y)-fracOf(st.year))*26000)};sceneT0+=st.tw.dur;}
+  else {st.tw=null;setYear(s.y,{keepSel:true,force:true});}
+  if(!o.noCam)camera(s); caption(s); if(!st.tw){drawPlaces(ERAS[st.era],st.year);applyCS();declutter();}
+}
+function setPlay(on){st.playing=on;$('#bPlay').textContent=on?'❚❚':'▶';if(on){sceneT0=performance.now();hideBubble();}else saveHash();}
+function jump(y,keep){setPlay(false);if(inJourney)leaveJourney(true);st.tw=null;setYear(y,{keepSel:!!keep});sc=sceneAt(y);caption(SC[sc]);}
+function capView(on,key){
+  key=key||st.cap; st.capView=!!(on&&key);
+  if(st.capView){const ll=A.FAR[key][1];fit([[Math.min(33.6,ll[0])-1.5,Math.min(30.6,ll[1])-1.5],[Math.max(36.4,ll[0])+1.5,Math.max(33.2,ll[1])+1.5]],{t:150,b:30,l:30,r:60},1500,k0);}
+  else home(900);
+  setTimeout(()=>{drawPower(ERAS[st.era],st.year);applyCS();},50);
+}
+const yearRaw=f=>{f=Math.min(.99999,Math.max(0,f));const i=Math.floor(f*N),g=ERAS[i].geo.y;return g[0]+(f*N-i)*(g[1]-g[0]);};
+let last=0;
+function tick(now){
+  const dt=Math.min(60,now-last||16);last=now;const k=T.k;
+  for(let i=anim.length-1;i>=0;i--){const a=anim[i];
+    if(a.type==='dot'){a.t=(a.t+a.sp*dt)%1;const u=a.t,q=1-u;a.el.setAttribute('transform',`translate(${q*q*a.a[0]+2*q*u*a.c[0]+u*u*a.b[0]},${q*q*a.a[1]+2*q*u*a.c[1]+u*u*a.b[1]}) scale(${1/k})`);a.el.setAttribute('opacity',Math.min(1,Math.min(u,1-u)*8));}
+    else if(a.type==='courier'){a.t=(a.t+a.sp*dt)%1;const p=a.path.getPointAtLength(a.t*a.len);a.el.setAttribute('transform',`translate(${p.x},${p.y}) scale(${1/k})`);}
+    else if(a.type==='pulse'){const u=(now-a.t0)/1800;if(u>=1){a.g.remove();anim.splice(i,1);continue;}const v=(u*2)%1;a.el.setAttribute('r',4+v*24);a.el.setAttribute('opacity',1-v);}
+  }
+  if(st.tw){const w=st.tw,u=Math.min(1,(now-w.t0)/w.dur),e=u<.5?2*u*u:1-Math.pow(-2*u+2,2)/2;
+    if(u>=1){st.tw=null;setYear(w.y,{keepSel:true,noHash:true,force:true});drawPlaces(ERAS[st.era],st.year);applyCS();declutter();}
+    else{const f=w.a+(w.b-w.a)*e;setYear(yearRaw(f),{keepSel:true,noHash:true,raw:f});}}
+  else if(st.playing&&now-sceneT0>SC[sc].dur){ if(sc<SC.length-1)showScene(sc+1,{tween:true}); else if(inJourney)leaveJourney(); else setPlay(false); }
+  requestAnimationFrame(tick);
 }
 
 /* ---------- lens ---------- */
@@ -312,7 +431,7 @@ function placeLens(){
   lensOut.attr('d',`M-9000,-9000H9000V9000H-9000ZM${c[0]-r},${c[1]}a${r},${r} 0 1,0 ${2*r},0a${r},${r} 0 1,0 ${-2*r},0Z`);
 }
 function setLens(on){
-  const L=st.lens; L.on=on; $('#bLens').classList.toggle('on',on); $('#lens').hidden=!on;
+  const L=st.lens; L.on=on; $('#lens').hidden=!on;
   gUnder.style('display',on?'':'none'); gLabUnder.style('display',on?'':'none');
   gTerr.attr('clip-path',on?'url(#lensOut)':null); gLab.attr('clip-path',on?'url(#lensOut)':null);
   if(on){ if(st.era<2){st.lens.depth=1;} L.x=W/2;L.y=Math.min(H-dockPad()-L.r-50,(H-dockPad())/2+50);L.depth=1;drawUnder();placeLens(); }
@@ -343,72 +462,78 @@ function strataHTML(ll){
 }
 const titleCase=s=>s===s.toUpperCase()?s.toLowerCase().replace(/(^|[\s\-(’])([a-zḥṣṭāīū])/g,(m,a,b)=>a+b.toUpperCase()).replace(/\b(Of|And|The|Al)\b/g,m=>m.toLowerCase()).replace(/^./,m=>m.toUpperCase()):s;
 function nearest(ll){let best=null,bd=1e9;Object.keys(A.PLACES).forEach(k=>{const d=km(ll,A.PLACES[k].ll);if(d<bd){bd=d;best=k;}});return [best,bd];}
-function standHere(ll){
+function nameAt(k,y){const ny=(C.NAME_YEARS||{})[k];let nm=C.CITIES[k].en;if(ny)ny.forEach(n=>{if(n[0]<=y)nm=n[1].split(' · ')[0];});return nm;}
+function standHere(ll,ev){
   if(ll[0]<L0||ll[0]>L1||ll[1]<B0||ll[1]>B1) return;
   gFx.selectAll('.herepin').remove(); cs(gFx.append('g').attr('class','herepin'),ll).append('circle').attr('class','here').attr('r',5); applyCS();
-  const inLake=G.lakes.some(l=>geomHas(l.g,ll)), onLand=geomHas(G.land,ll)&&!inLake;
-  const lat=Math.abs(ll[1]).toFixed(2)+'° N',lon=ll[0].toFixed(2)+'° E';
+  const inLake=G.lakes.some(l=>geomHas(l.g,ll)), onLand=geomHas(G.land,ll)&&!inLake, y=st.year, when=st.era?'In '+fmtYs(y):'Before the names';
   if(!onLand){
-    const w=inLake?(ll[1]>32?A.WATERS[2]:A.WATERS[1]):(ll[1]<30&&ll[0]>34?A.WATERS[4]:A.WATERS[0]);
-    openModal(`<h2>Open water</h2><p class="sub">${lat}, ${lon}</p><h3>What this water has been called</h3><ul class="strata nm">${w.names.map(n=>`<li data-y="${Math.max(n[0],-3000)+1}" class="${st.year>=n[0]&&st.year<n[1]?'cur':''}"><span class="yr">${n[0]<-3000?'earliest':'from '+fmtYs(n[0])}</span><span>${esc(n[2])}</span></li>`).join('')}</ul>`);
-    return;
+    const wi=inLake?(ll[1]>32?2:1):(ll[1]<30&&ll[0]>34?4:0),w=A.WATERS[wi],n=w.names.find(n=>y>=n[0]&&y<n[1])||w.names[w.names.length-1];
+    bubbleAt(ev,`<small>${when}, this water is</small><h5>${esc(n[2])}</h5>${w.names.length>1?`<a class="more" data-water="${wi}">Its other names ›</a>`:''}`); return;
   }
-  const [nk,nd]=nearest(ll);
-  openModal(`<h2>Standing here</h2><p class="sub">${lat}, ${lon} · ${nd<1.5?'at':Math.round(nd)+' km from'} <a class="gl" data-place="${nk}">${esc(C.CITIES[nk].en)}</a></p><h3>Who has ruled this spot</h3>${strataHTML(ll)}<p class="foot" style="font-style:italic;color:var(--ink2);margin-top:.8em">Tap a row to travel to that time. Outlines are approximate, so places near a border may fall on either side.</p>`);
+  const rows=strata(ll).filter(r=>y>=r.y0&&y<r.y1&&!r.none), r=rows[rows.length-1];
+  bubbleAt(ev,`<small>${when}, this spot is in</small><h5>${r?esc(titleCase(r.l)):'no state we can name'}</h5>${r&&r.sub?`<p>${esc(r.sub)}.</p>`:''}<a class="more" data-all="${ll[0].toFixed(3)},${ll[1].toFixed(3)}">Everyone who has ruled it ›</a>`);
 }
-function openPlace(k){
-  const c=C.CITIES[k],pl=A.PLACES[k]; st.sel=k; sigP=''; setYear(st.year,{noHash:true}); saveHash();
-  const ny=(C.NAME_YEARS||{})[k];
-  let h=`<h2>${esc(c.en)}</h2><div class="tri">${c.he?`<div><span class="he">${c.he}</span><small>Hebrew · ${esc(c.he_tr||'')}</small></div>`:''}${c.ar?`<div><span class="ar">${c.ar}</span><small>Arabic · ${esc(c.ar_tr||'')}</small></div>`:''}</div>`;
-  if(c.also) h+=`<p class="sub">${esc(c.also)}</p>`;
-  h+=`<p>${esc(c.blurb)}</p>`;
+function allRulers(ll){
+  const [nk,nd]=nearest(ll);
+  openModal(`<h2>Who has ruled this spot</h2><p class="sub">${nd<1.5?'At':Math.round(nd)+' km from'} ${esc(C.CITIES[nk].en)}. Tap a row to travel to that time.</p>${strataHTML(ll)}<p class="sub" style="margin-top:.8em;font-size:.95rem">Outlines are approximate, so places near a border may fall on either side.</p>`);
+}
+function openPlace(k,ev){
+  const c=C.CITIES[k]; st.sel=k; sigP=''; setYear(st.year,{noHash:true,keepSel:true}); saveHash();
+  if(!ev){placePage(k);return;}
+  const nm=nameAt(k,st.year);
+  bubbleAt(ev,`<h5>${esc(nm)}</h5>${nm!==c.en?`<small>today ${esc(c.en)}</small>`:''}<div>${c.he?`<span class="he">${c.he}</span>`:''}${c.ar?`<span class="ar">${c.ar}</span>`:''}</div><p>${esc(c.blurb)}</p><a class="more" data-place="${k}">Its names and rulers ›</a>`);
+}
+function placePage(k){
+  const c=C.CITIES[k],pl=A.PLACES[k],ny=(C.NAME_YEARS||{})[k];
+  let h=`<h2>${esc(c.en)}</h2><div class="tri">${c.he?`<div><span class="he">${c.he}</span><small>Hebrew · ${esc(c.he_tr||'')}</small></div>`:''}${c.ar?`<div><span class="ar">${c.ar}</span><small>Arabic · ${esc(c.ar_tr||'')}</small></div>`:''}</div><p>${esc(c.blurb)}</p>`;
   if(ny){let cur=-1;ny.forEach((n,j)=>{if(n[0]<=st.year)cur=j;});
     h+='<h3>Its names, in order</h3><ul class="strata nm">'+ny.map((n,j)=>`<li data-y="${n[0]+1}" class="${j===cur?'cur':''}"><span class="yr">${n[0]<0?'c. ':''}${fmtYs(n[0])}</span><span>${esc(n[1])}${n[2]?` <span class="d">· ${esc(n[2])}</span>`:''}</span></li>`).join('')+'</ul>';}
-  else if(C.NAME_STACKS[k]) h+='<h3>Its names</h3><ul class="strata nm">'+C.NAME_STACKS[k].map(n=>`<li><span class="yr">${esc(n[0])}</span><span>${esc(n[1])}</span></li>`).join('')+'</ul>';
-  if(pl.ll[0]>=L0&&pl.ll[0]<=L1) h+='<h3>Who has ruled it</h3>'+strataHTML(pl.ll);
+  else if(c.also) h+=`<p class="sub">${esc(c.also)}</p>`;
+  h+=`<p style="margin:1em 0"><button class="btn" data-fly="${k}">Show on the map</button></p>`;
+  if(pl.ll[0]>=L0&&pl.ll[0]<=L1) h+='<details><summary>Who has ruled it</summary>'+strataHTML(pl.ll)+'</details>';
   const vs=[];ERAS.forEach(e=>(e.stories||[]).forEach(s=>{if(s.loc===k)vs.push([e,s]);}));
-  if(vs.length) h+='<h3>Voices from here</h3>'+vs.map(([e,s])=>`<div class="voice" data-y="${REP[e.id]}" style="cursor:pointer"><span class="e">${s.prop}</span><p><b>${esc(s.role)}</b> ${esc(s.text)}</p></div>`).join('');
-  h+=`<p style="margin-top:1em"><button class="btn" data-fly="${k}">Show on the map</button></p>`;
+  if(vs.length) h+='<details><summary>Voices from here</summary>'+vs.map(([e,s])=>`<div class="voice" data-y="${REP[e.id]}" style="cursor:pointer"><span class="e">${s.prop}</span><p><b>${esc(s.role)}</b> ${esc(s.text)}</p></div>`).join('')+'</details>';
   openModal(h);
 }
 
 /* ---------- bubbles + modals ---------- */
 function bubbleAt(ev,html){
+  setPlay(false);
   const r=$('#mapwrap').getBoundingClientRect(),b=$('#bubble'),x=ev.clientX-r.left,y=ev.clientY-r.top;
   b.innerHTML=`<button class="x" aria-label="Close">×</button>`+html; b.hidden=false;
-  const below=y<170; b.classList.toggle('below',below);
+  const below=y<230; b.classList.toggle('below',below);
   b.style.left=Math.max(155,Math.min(W-155,x))+'px'; b.style.top=(below?y+22:y-22)+'px';
-  hideHint();
 }
-function hideBubble(){$('#bubble').hidden=true;}
-$('#bubble').addEventListener('click',hideBubble);
-function openModal(html){$('#mBody').innerHTML=html;$('#modal').hidden=false;$('#ov').hidden=false;$('#modal').scrollTop=0;hideBubble();hideHint();}
+function hideBubble(){$('#bubble').hidden=true;gFx.selectAll('.herepin').remove();}
+$('#bubble').addEventListener('click',()=>{$('#bubble').hidden=true;});
+function openModal(html){setPlay(false);$('#mBody').innerHTML=html;$('#modal').hidden=false;$('#ov').hidden=false;$('#modal').scrollTop=0;$('#bubble').hidden=true;}
 function closeModal(){$('#modal').hidden=true;$('#ov').hidden=true;gFx.selectAll('.herepin').remove();}
 $('#ov').addEventListener('click',closeModal); $('#mClose').addEventListener('click',closeModal);
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();hideBubble();}});
-function hideHint(){$('#hint').classList.add('gone');}
-
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();hideBubble();}if(e.key===' '&&e.target===document.body){e.preventDefault();$('#bPlay').click();}});
+function hideHint(){}
 document.addEventListener('click',e=>{
-  const gl=e.target.closest('a.gl');
-  if(gl){e.preventDefault();
-    if(gl.dataset.place){openPlace(gl.dataset.place);return;}
-    const t=C.GLOSSARY[gl.dataset.g]; if(t) openModal(`<h3 style="margin-top:0">A word explained</h3><h2>${esc(t[0])}</h2><p>${esc(t[1])}</p>`); return;}
-  const li=e.target.closest('#mBody [data-y]'); if(li){closeModal();setYear(+li.dataset.y,{keepSel:true});return;}
-  const fb=e.target.closest('[data-fly]'); if(fb){closeModal();flyTo(A.PLACES[fb.dataset.fly].ll,Math.max(2.4,T.k/k0));return;}
-  const cl=e.target.closest('.chron li'); if(cl){const ev=ERAS[st.era].geo.events[+cl.dataset.ev];setYear(ev[0]);if(ev[2]&&A.PLACES[ev[2]]){pulse(A.PLACES[ev[2]].ll);if(!WIDE())$('#sheet').classList.remove('open');}return;}
+  const t=e.target;
+  const gl=t.closest('a.gl[data-g]'); if(gl){e.preventDefault();const g=C.GLOSSARY[gl.dataset.g];if(g)openModal(`<h3 style="margin-top:0">A word explained</h3><h2>${esc(g[0])}</h2><p>${esc(g[1])}</p>`);return;}
+  const pp=t.closest('[data-place]'); if(pp){placePage(pp.dataset.place);return;}
+  const al=t.closest('[data-all]'); if(al){allRulers(al.dataset.all.split(',').map(Number));return;}
+  const wa=t.closest('[data-water]'); if(wa){const w=A.WATERS[+wa.dataset.water];openModal(`<h2>What this water has been called</h2><ul class="strata nm" style="margin-top:.8em">${w.names.map(n=>`<li data-y="${Math.max(n[0],-3000)+1}" class="${st.year>=n[0]&&st.year<n[1]?'cur':''}"><span class="yr">${n[0]<-3000?'earliest':'from '+fmtYs(n[0])}</span><span>${esc(n[2])}</span></li>`).join('')}</ul>`);return;}
+  const li=t.closest('#mBody [data-y]'); if(li){closeModal();jump(+li.dataset.y,true);return;}
+  const ju=t.closest('[data-jump]'); if(ju){closeModal();jump(+ju.dataset.jump);return;}
+  const fb=t.closest('[data-fly]'); if(fb){closeModal();flyTo(A.PLACES[fb.dataset.fly].ll,Math.max(2.4,T.k/k0));return;}
 });
-svg.on('click',e=>{ if(e.defaultPrevented)return; if(!$('#bubble').hidden){hideBubble();return;} if(!$('#layers').hidden){$('#layers').hidden=true;return;}
-  const p=d3.pointer(e,svg.node()); standHere(unproj(T.invert(p))); });
+svg.on('click',e=>{ if(e.defaultPrevented)return; if(!$('#menu').hidden||!$('#layers').hidden){$('#menu').hidden=true;$('#layers').hidden=true;return;} if(!$('#bubble').hidden){hideBubble();return;}
+  standHere(unproj(T.invert(d3.pointer(e,svg.node()))),e); });
 
 /* ---------- search ---------- */
 let INDEX=null;
 function buildIndex(){
   INDEX=[];
   Object.keys(A.PLACES).forEach(k=>{const c=C.CITIES[k];if(!c)return;const ny=((C.NAME_YEARS||{})[k]||[]).map(n=>n[1]).join(' ');
-    INDEX.push({t:'Place',title:c.en,sub:[c.he_tr,c.ar_tr].filter(Boolean).join(' · '),hay:[c.en,c.he_tr,c.ar_tr,c.also,ny,c.he,c.ar].join(' '),go:()=>{openPlace(k);}});});
-  ERAS.forEach(e=>{if(e.id==='orientation')return;INDEX.push({t:'Era',title:e.name,sub:e.range+' · '+e.cyr,hay:[e.name,e.range,e.cnm,e.land.map(l=>l[1]).join(' ')].join(' '),go:()=>{closeModal();setYear(REP[e.id]);}});
-    (e.geo.events||[]).forEach(ev=>INDEX.push({t:fmtYs(ev[0]),title:ev[1],sub:'',hay:ev[1]+' '+Math.floor(Math.abs(ev[0])),go:()=>{closeModal();setYear(ev[0]);if(ev[2]&&A.PLACES[ev[2]])pulse(A.PLACES[ev[2]].ll);}}));
-    e.geo.terr.forEach(t=>{if(t.l&&!t.bg)INDEX.push({t:'Territory',title:titleCase(t.l),sub:t.sub,hay:t.l+' '+t.sub,go:()=>{closeModal();const r=t.y||e.geo.y;setYear((r[0]+r[1])/2);}});});});
+    INDEX.push({t:'Place',title:c.en,sub:[c.he_tr,c.ar_tr].filter(Boolean).join(' · '),hay:[c.en,c.he_tr,c.ar_tr,c.also,ny,c.he,c.ar].join(' '),go:()=>{st.sel=k;sigP='';placePage(k);}});});
+  ERAS.forEach(e=>{if(e.id==='orientation')return;INDEX.push({t:'Era',title:e.name,sub:e.range+' · '+e.cyr,hay:[e.name,e.range,e.cnm,e.land.map(l=>l[1]).join(' ')].join(' '),go:()=>{closeModal();jump(REP[e.id]);}});
+    (e.geo.events||[]).forEach(ev=>INDEX.push({t:fmtYs(ev[0]),title:ev[1],sub:'',hay:ev[1]+' '+Math.floor(Math.abs(ev[0])),go:()=>{closeModal();jump(ev[0]);if(ev[2]&&A.PLACES[ev[2]])pulse(A.PLACES[ev[2]].ll);}}));
+    e.geo.terr.forEach(t=>{if(t.l&&!t.bg)INDEX.push({t:'Territory',title:titleCase(t.l),sub:t.sub,hay:t.l+' '+t.sub,go:()=>{closeModal();const r=t.y||e.geo.y;jump((r[0]+r[1])/2);}});});});
   Object.keys(C.GLOSSARY).forEach(k=>{const g=C.GLOSSARY[k];INDEX.push({t:'Word',title:g[0],sub:g[1].slice(0,90)+'…',hay:g[0]+' '+g[1],go:()=>openModal(`<h3 style="margin-top:0">A word explained</h3><h2>${esc(g[0])}</h2><p>${esc(g[1])}</p>`)});});
   A.ROUTES.forEach(r=>INDEX.push({t:'Road',title:r.l,sub:r.text,hay:r.l+' '+r.text,go:()=>{closeModal();if(st.year<r.y[0]||st.year>r.y[1])setYear((Math.max(r.y[0],-1500)+r.y[1])/2);}}));
 }
@@ -424,34 +549,23 @@ function openSearch(){
 
 /* ---------- journeys ---------- */
 function openJourneys(){
-  openModal('<h2>Journeys</h2><p class="sub">Short guided walks through the layers.</p><ul class="jlist">'+A.JOURNEYS.map((j,i)=>`<li data-j="${i}"><span class="e">${j.icon}</span><div><b>${esc(j.title)}</b><span>${esc(j.blurb)} · ${j.steps.length} stops</span></div></li>`).join('')+'</ul>');
+  openModal('<h2>Short journeys</h2><p class="sub">Each follows one thread through the layers, then returns you to the film.</p><ul class="jlist">'+A.JOURNEYS.map((j,i)=>`<li data-j="${i}"><span class="e">${j.icon}</span><div><b>${esc(j.title)}</b><span>${esc(j.blurb)}</span></div></li>`).join('')+'</ul>');
   $('#mBody .jlist').addEventListener('click',e=>{const li=e.target.closest('li');if(!li)return;closeModal();startJourney(A.JOURNEYS[+li.dataset.j]);});
 }
-function startJourney(j){setPlay(false);setLens(false);st.journey={j,i:0};$('#sheet').classList.add('journey');$('#sheet').classList.remove('open');$('#jcard').hidden=false;step(0,true);afterLayout();}
-function endJourney(){st.journey=null;$('#sheet').classList.remove('journey');$('#jcard').hidden=true;afterLayout();}
-function step(i,skipCam){
-  const J=st.journey,s=J.j.steps[i];J.i=i;setYear(s.y,{force:true});
-  $('#jcard').innerHTML=`<div class="jt"><span>${J.j.icon} ${esc(J.j.title)}</span><span>${i+1} / ${J.j.steps.length}</span></div><p>${s.t}</p><div class="jn"><button id="jPrev" ${i?'':'disabled'}>‹ Back</button><button id="jExit">Leave</button><button id="jNext" class="go">${i<J.j.steps.length-1?'Next ›':'Finish'}</button></div>`;
-  $('#jPrev').onclick=()=>step(i-1); $('#jExit').onclick=endJourney; $('#jNext').onclick=()=>i<J.j.steps.length-1?step(i+1):endJourney();
-  if(!skipCam) setTimeout(journeyCam,60);
+function startJourney(j){
+  setLens(false); inJourney=j;
+  SC=j.steps.map((s,i)=>({y:s.y,kind:'j',era:eraIdxOf(s.y),kick:j.title+' · '+(i+1)+' of '+j.steps.length,text:s.t,cam:s.cap?{cap:capOf(ERAS[eraIdxOf(s.y)],s.y)}:s.c?{c:s.c,z:Math.min(3,s.z||1.6)}:{home:1},dur:Math.max(6500,2200+s.t.replace(/<[^>]+>/g,'').length*62)}));
+  SC.forEach(s=>{if(s.cam.cap===null)s.cam={home:1};});
+  showScene(0,{tween:true}); setPlay(true);
 }
-function journeyCam(){
-  const J=st.journey; if(!J)return; const s=J.j.steps[J.i];
-  if(s.cap&&st.cap&&km(JERU,A.FAR[st.cap][1])>150) capView(true); else {st.capView=false; if(s.c) flyTo(s.c,s.z||1.6); else home(900);} if(s.c&&s.z>=3) pulse(s.c);
-}
-function capView(on){
-  st.capView=on; const key=st.cap;
-  if(on&&key){const ll=A.FAR[key][1];fit([[Math.min(33.6,ll[0])-1.5,Math.min(30.6,ll[1])-1.5],[Math.max(36.4,ll[0])+1.5,Math.max(33.2,ll[1])+1.5]],{t:150,b:30,l:30,r:60},1100,k0);}
-  else home(900);
-  drawPower(ERAS[st.era],st.year); applyCS();
-}
+function leaveJourney(quiet){inJourney=null;SC=MAIN;sc=sceneAt(st.year);setPlay(false);if(!quiet){caption(SC[sc]);home(900);}}
 
 /* ---------- about, layers ---------- */
 function openAbout(){
   openModal(`<h2>Palimpsest</h2><p class="sub">A land rewritten: Canaan, Israel and Judah, Judaea, Palaestina, Filasṭīn, the Holy Land, Eretz Yisrael.</p>
   <p>A palimpsest is a manuscript scraped and written over, with the older words still showing through. This atlas treats one small land the same way, across about 5,000 years.</p>
   <h3>How to use it</h3>
-  <p><b>Drag the timeline</b> to move through the years. <b>Tap any spot</b> to see everyone who has ruled it. <b>Tap a town</b> for its names in order. <b>◐ Scrape</b> opens a lens onto the layer beneath. <b>✦ Journeys</b> are guided walks. <b>⌕</b> searches places, years and words.</p>
+  <p><b>Press play</b> and the land's history runs as a film, with music in the scale of each age. <b>Pause any time</b> and touch the map: tap a spot to see who rules it, tap a town for its name. Drag the coloured bar to jump through time. <b>Read</b> opens the full chapter. Under <b>⋯</b> are short journeys, a lens onto the layer beneath, and the map's layers.</p>
   <h3>A note on fairness</h3>
   <p>This is a guide built to be fair to a contested history, not to settle it. Borders are washes of colour, not survey lines; flows show direction, not exact numbers. Where one event carries two names — 1948 above all — both are given. Colours are pigments, not flags. The last chapter reflects events as of <b>November 2026</b>.</p>
   <h3>Sources</h3>${A.SOURCES.map(s=>`<p><b>${s[0]}.</b> ${s[1]}</p>`).join('')}
@@ -459,7 +573,7 @@ function openAbout(){
   <p class="foot" style="font-style:italic;color:var(--ink2)">SIFRKALON · CC BY-SA 4.0</p>`);
   $('#bCopy').onclick=()=>{saveHash(true);const u=location.href;(navigator.clipboard?navigator.clipboard.writeText(u):Promise.reject()).then(()=>{$('#bCopy').textContent='Link copied';},()=>{prompt('Copy this link',u);});};
 }
-const LAYERS=[['rule','Who rules (colour washes)'],['people','People on the move'],['roads','Roads, rails and trade'],['voices','Voices'],['sacred','Sacred sites'],['borders','Today’s borders, for reference']];
+const LAYERS=[['rule','Who rules (colour washes)'],['people','People on the move'],['roads','Roads, rails and trade'],['sacred','Sacred sites'],['borders','Today’s borders, for reference']];
 function buildLayers(){
   const p=$('#layers'); p.innerHTML='<h4>Layers</h4>'+LAYERS.map(l=>`<label><input type="checkbox" data-l="${l[0]}" ${st.layers[l[0]]?'checked':''}>${l[1]}</label>`).join('');
   p.addEventListener('change',e=>{const k=e.target.dataset.l;st.layers[k]=e.target.checked?1:0;applyLayers();});
@@ -475,16 +589,16 @@ function buildTimeline(){
   $('#segs').innerHTML=ERAS.map(e=>`<i style="background:${e.swatch}" title="${esc(e.name)}"></i>`).join('');
   const tr=$('#track'); let drag=false;
   const at=e=>{const r=tr.getBoundingClientRect();return Math.min(1,Math.max(0,(e.clientX-r.left)/r.width));};
-  tr.addEventListener('pointerdown',e=>{drag=true;tr.setPointerCapture(e.pointerId);tr.classList.add('drag');setPlay(false);if(st.journey)endJourney();const f=at(e);setYear(yearOf(f),{raw:f,noHash:true});hideHint();});
-  tr.addEventListener('pointermove',e=>{if(!drag)return;const f=at(e);setYear(yearOf(f),{raw:f,noHash:true});});
-  const up=()=>{if(!drag)return;drag=false;tr.classList.remove('drag');setYear(st.year);};
+  const scrub=e=>{const f=at(e);st.tw=null;setYear(yearOf(f),{raw:f,noHash:true});const k=sceneAt(st.year);if(k!==sc||SC!==MAIN){SC=MAIN;sc=k;caption(SC[sc]);}};
+  tr.addEventListener('pointerdown',e=>{drag=true;tr.setPointerCapture(e.pointerId);tr.classList.add('drag');setPlay(false);if(inJourney)leaveJourney(true);scrub(e);});
+  tr.addEventListener('pointermove',e=>{if(drag)scrub(e);});
+  const up=()=>{if(!drag)return;drag=false;tr.classList.remove('drag');saveHash();};
   tr.addEventListener('pointerup',up);tr.addEventListener('pointercancel',up);
-  tr.addEventListener('keydown',e=>{const g=ERAS[st.era].geo.y,stp=(g[1]-g[0])/40;if(e.key==='ArrowRight')setYear(st.year+stp);if(e.key==='ArrowLeft')setYear(st.year-stp);});
-  $('#bPrev').onclick=()=>{setPlay(false);if(st.journey)endJourney();setYear(REP[ERAS[Math.max(0,st.era-1)].id]);};
-  $('#bNext').onclick=()=>{setPlay(false);if(st.journey)endJourney();setYear(REP[ERAS[Math.min(N-1,st.era+1)].id]);};
-  $('#bPlay').onclick=()=>{if(st.journey)endJourney();if(!st.playing&&fracOf(st.year)>.99)setYear(ERAS[1].geo.y[0]);setPlay(!st.playing);};
+  tr.addEventListener('keydown',e=>{if(e.key==='ArrowRight')showScene(sc+1,{tween:true});if(e.key==='ArrowLeft')showScene(sc-1,{tween:true});});
+  $('#bPrev').onclick=()=>showScene(sc-1,{tween:true});
+  $('#bNext').onclick=()=>showScene(sc+1,{tween:true});
+  $('#bPlay').onclick=()=>{if(!st.playing&&sc>=SC.length-1&&!inJourney)showScene(0);setPlay(!st.playing);};
 }
-function setPlay(on){st.playing=on;$('#bPlay').textContent=on?'❚❚':'▶';if(!on)saveHash();}
 
 /* ---------- url ---------- */
 let hashT=null;
@@ -492,29 +606,37 @@ function saveHash(now){clearTimeout(hashT);const f=()=>{const y=Math.round(st.ye
 function readHash(){const m=/y=(-?[\d.]+)/.exec(location.hash),p=/p=([a-z0-9]+)/.exec(location.hash);return {y:m?+m[1]:null,p:p&&A.PLACES[p[1]]?p[1]:null};}
 
 /* ---------- wiring ---------- */
-$('#bSearch').onclick=openSearch; $('#bJourneys').onclick=openJourneys; $('#bAbout').onclick=openAbout;
-$('#bLens').onclick=()=>{setLens(!st.lens.on);hideHint();};
-$('#bLayers').onclick=()=>{$('#layers').hidden=!$('#layers').hidden;};
-$('#bHome').onclick=()=>home(800);
-$('#capChip').onclick=()=>{if($('#capChip').dataset.far)capView(!st.capView);};
-const toggleSheet=()=>{$('#sheet').classList.toggle('open');hideHint();};
-$('#grip').onclick=toggleSheet; $('#peek').onclick=toggleSheet;
-function relayout(keep){
+$('#bSearch').onclick=openSearch;
+$('#bSound').onclick=()=>{Snd.set(!Snd.on);$('#bSound').classList.toggle('on',Snd.on);caption(SC[sc]);};
+$('#bMore').onclick=()=>{$('#layers').hidden=true;$('#menu').hidden=!$('#menu').hidden;};
+$('#menu').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;$('#menu').hidden=true;const m=b.dataset.m;
+  if(m==='journeys')openJourneys();else if(m==='lens'){setPlay(false);setLens(!st.lens.on);}else if(m==='layers')$('#layers').hidden=false;else if(m==='home')home(800);else openAbout();});
+$('#capChip').onclick=()=>{if($('#capChip').dataset.far){setPlay(false);capView(!st.capView);}};
+$('#bRead').onclick=()=>openModal(chapterHTML(ERAS[st.era]));
+$('#cap').addEventListener('click',e=>{
+  if(e.target.closest('#jExit')){leaveJourney();return;}
+  if(e.target.closest('#mNote')){const m=MUSIC[ERAS[SC[sc].era].id];openModal(`<h3 style="margin-top:0">What you are hearing</h3><h2>♪ ${esc(m.name)}</h2><p>${esc(m.note)}</p><p class="sub">All of the music is generated as you listen, in the scale of each age. Only the scales are historical; the melodies are not.</p>`);return;}
+});
+function relayout(){
   const k=T.k/k0,c=unproj(T.invert([W/2,(H-dockPad())/2+40]));
-  size(); st.dockH=0; const hk=fit(HOME,null,0); k0=hk; zoom.scaleExtent([k0*.03,k0*16]);
-  if(st.journey) journeyCam(); else if(keep&&Math.abs(k-1)>.02) flyTo(c,k,0);
+  size(); k0=fit(HOME,null,0); zoom.scaleExtent([k0*.03,k0*16]);
+  if(Math.abs(k-1)>.02&&!st.capView) flyTo(c,k,0);
   applyCS(); declutter(); placeLens();
 }
-function afterLayout(){setTimeout(()=>relayout(true),420);}
-let rsT; new ResizeObserver(()=>{clearTimeout(rsT);rsT=setTimeout(()=>{const r=$('#mapwrap').getBoundingClientRect();if(Math.abs(r.width-W)>1||Math.abs(r.height-H)>1)relayout(true);},140);}).observe($('#mapwrap'));
+let rsT; new ResizeObserver(()=>{clearTimeout(rsT);rsT=setTimeout(()=>{const r=$('#mapwrap').getBoundingClientRect();if(Math.abs(r.width-W)>1||Math.abs(r.height-H)>1)relayout();},140);}).observe($('#mapwrap'));
 
 /* ---------- start ---------- */
 size(); buildTimeline(); buildLayers();
 k0=fit(HOME,null,0); zoom.scaleExtent([k0*.03,k0*16]);
+MAIN=buildScenes(); SC=MAIN;
 const h0=readHash(); if(h0.p)st.sel=h0.p;
-setYear(h0.y!=null?h0.y:REP.orientation,{noHash:true});
-if(h0.p)flyTo(A.PLACES[h0.p].ll,2.6,0);
-setTimeout(hideHint,9000);
+function begin(sound){
+  $('#intro').classList.add('gone'); setTimeout(()=>{$('#intro').remove();},900);
+  if(sound){Snd.set(true);$('#bSound').classList.add('on');}
+  showScene(0,{}); setPlay(true);
+}
+if(h0.y!=null){ $('#intro').remove(); setYear(h0.y,{noHash:true,keepSel:true}); sc=sceneAt(h0.y); caption(SC[sc]); if(h0.p)flyTo(A.PLACES[h0.p].ll,2.6,0); }
+else { setYear(REP.orientation,{noHash:true}); caption(SC[0]); $('#goSound').onclick=()=>begin(true); $('#goQuiet').onclick=()=>begin(false); }
 requestAnimationFrame(tick);
-window.PAL={setYear,st,flyTo,openPlace,standHere,setLens,startJourney:i=>startJourney(A.JOURNEYS[i]),capView};
+window.PAL={setYear,jump,st,flyTo,openPlace,standHere,setLens,startJourney:i=>startJourney(A.JOURNEYS[i]),capView,showScene,setPlay,scenes:()=>SC,Snd,begin};
 })();

@@ -6,13 +6,10 @@ An interactive historical atlas of the land called Canaan, Israel, Judah, Judaea
 
 ## What you can do
 
-- **Drag the timeline** through the years. Borders, capitals, roads and even the names of the seas change as you go.
-- **Tap any spot** to see everyone who has ruled it, in order.
-- **Tap a town** for its names in Hebrew and Arabic, every name it has carried, and its rulers.
-- **Scrape (◐)** opens a lens onto the older layer beneath the one you are looking at.
-- **Journeys (✦)** are short guided walks: Jerusalem's names, the name of the land, Gaza, and the far capitals that ruled it.
-- **Search (⌕)** finds places, older names, years, events and terms.
-- A gold thread shows where power sat, usually far away. Moving dots show people on the move.
+- **Press play.** The history runs as a film of about nineteen minutes: captions, a moving camera, and music generated in the scale of each age (Bronze Age lyre tunings, Greek modes, Byzantine chant, maqam, plainchant, and on to the present). Only the scales are historical; the melodies are improvised.
+- **Pause and touch the map.** Tap a spot to see who rules it in that year; tap a town for its name then and now. Each answer is short, with a link to the full list.
+- **Drag the coloured bar** to jump through time. **Read** opens the full chapter.
+- Under **⋯**: short guided journeys, a lens that scrapes down to the layer beneath, and the map's layers. **⌕** searches places, older names, years and words.
 
 ## A note on fairness
 

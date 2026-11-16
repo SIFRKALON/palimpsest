@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Palimpsest — A Land Rewritten</title>
-<meta name="description" content="An interactive historical atlas of the land called Canaan, Israel, Judaea, Palaestina, Filasṭīn and the Holy Land, across 5,000 years.">
+<meta name="description" content="A film you can stop and touch: the land called Canaan, Israel, Judaea, Palaestina, Filasṭīn and the Holy Land, across 5,000 years.">
 <meta property="og:title" content="Palimpsest — A Land Rewritten">
-<meta property="og:description" content="One land, 5,000 years, every name it has carried. An interactive historical atlas.">
+<meta property="og:description" content="One land, 5,000 years, every name it has carried. A film you can stop and touch.">
 <meta property="og:image" content="https://sifrkalon.github.io/palimpsest/assets/preview.jpg">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="theme-color" content="#16110b">
@@ -21,46 +21,49 @@
     <svg id="map" role="img" aria-label="Historical map of the land between the Mediterranean and the Jordan"></svg>
     <div id="vignette"></div>
     <div id="lens" hidden><div id="lensRing"></div><button id="lensTab" aria-label="Drag to move the lens; tap to dig deeper"></button></div>
-
     <header id="head">
-      <div id="brand"><span class="kk">Palimpsest</span><span class="sig">a land rewritten</span></div>
       <div id="yearBig" aria-live="polite"></div>
       <div id="eraLine"></div>
       <button id="capChip" class="chip" hidden></button>
     </header>
-
-    <nav id="tools" aria-label="Map tools">
-      <button id="bSearch" title="Search places, words and events" aria-label="Search">⌕</button>
-      <button id="bJourneys" title="Guided journeys" aria-label="Journeys">✦</button>
-      <button id="bLens" title="Scrape: see the older layer underneath" aria-label="Scrape lens">◐</button>
-      <button id="bLayers" title="Layers" aria-label="Layers">☰</button>
-      <button id="bHome" title="Back to the whole land" aria-label="Reset view">⌂</button>
-      <button id="bAbout" title="About, sources and sharing" aria-label="About">?</button>
+    <nav id="tools" aria-label="Tools">
+      <button id="bSound" title="Music on or off" aria-label="Music">♪</button>
+      <button id="bSearch" title="Search" aria-label="Search">⌕</button>
+      <button id="bMore" title="More" aria-label="More">⋯</button>
     </nav>
+    <div id="menu" class="pop" hidden>
+      <button data-m="journeys">✦ Short journeys</button>
+      <button data-m="lens">◐ Scrape to the layer beneath</button>
+      <button data-m="layers">☰ What the map shows</button>
+      <button data-m="home">⌂ Back to the whole land</button>
+      <button data-m="about">? About and sources</button>
+    </div>
     <div id="layers" class="pop" hidden></div>
     <div id="bubble" class="bubble" hidden></div>
-    <div id="hint">Drag the timeline · tap any spot on the map</div>
   </div>
-
   <section id="dock">
-    <div id="timeline">
-      <button id="bPrev" aria-label="Previous era">‹</button>
-      <button id="bPlay" aria-label="Play through time">▶</button>
+    <div id="cap"><div id="capKick"></div><div id="capText"></div></div>
+    <div id="ctl">
+      <button id="bPrev" aria-label="Previous moment">‹</button>
+      <button id="bPlay" aria-label="Play or pause">▶</button>
+      <button id="bNext" aria-label="Next moment">›</button>
       <div id="track" role="slider" aria-label="Year" tabindex="0"><div id="segs"></div><div id="thumb"><span id="thumbLab"></span></div></div>
-      <button id="bNext" aria-label="Next era">›</button>
-    </div>
-    <div id="sheet">
-      <button id="grip" aria-label="Open or close the chapter"><i></i></button>
-      <div id="peek"></div>
-      <div id="jcard" hidden></div>
-      <div id="body"></div>
+      <button id="bRead">Read</button>
     </div>
   </section>
 </div>
-
+<div id="intro">
+  <div class="in">
+    <div class="kk">SIFRKALON</div>
+    <h1>Palimpsest</h1>
+    <p class="tag">a land rewritten</p>
+    <p>One small land, five thousand years, and every name it has carried. A film you can stop and touch.</p>
+    <button id="goSound" class="big">▶ Begin, with music</button>
+    <button id="goQuiet" class="quiet">Begin in silence</button>
+  </div>
+</div>
 <div id="ov" hidden></div>
 <div id="modal" class="modal" hidden role="dialog" aria-modal="true"><button class="x" id="mClose" aria-label="Close">×</button><div id="mBody"></div></div>
-
 <script src="vendor/d3.min.js"></script>
 <script src="data/geo.js"></script>
 <script src="data/content.js"></script>
